@@ -12,6 +12,7 @@ export class SimpleSortable<T extends Data> implements SortableSpec<T> {
     constructor (
         public list: T[],
         public listId: any,
+        public trackBy: (item: T) => any,
         public onChange?: (newValue: T[]) => void,
         public onCommit?: (newValue: T[]) => void
     ) { }

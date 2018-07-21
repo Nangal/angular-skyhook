@@ -39,6 +39,10 @@ export class MutateDirective<T extends Data> implements SortableSpec<T> {
         this.host.spec = this;
     }
 
+    trackBy(x: T): any {
+        return 0
+    }
+
     move(item: DraggedItem<T>, mutate: boolean) {
         let without = mutate ? this.mutable : this.mutable.slice(0);
         if (!item.isCopy /* && item.listId = this.listId */) {

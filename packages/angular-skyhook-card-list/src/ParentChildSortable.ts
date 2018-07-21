@@ -2,12 +2,14 @@ import { DraggedItem } from "./dragged-item";
 import { Data } from "./data";
 import { SortableSpec } from './SortableSpec';
 
-export class ParentChildSortable<P extends { id: number } & { children: C[] }, C extends Data> {
+export class ParentChildSortable<P extends { id: any; } & { children: C[] }, C extends { id: any; }> {
     beforeDrag: P[] = null;
 
     get either() {
         return this.beforeDrag || this.parents;
     }
+
+    tracker = (x: C | P) => x.id;
 
     constructor (
         public parents: P[],
@@ -34,7 +36,6 @@ export class ParentChildSortable<P extends { id: number } & { children: C[] }, C
     }
 
     moveChild(item: DraggedItem<C>) {
-        console.log(item);
         const fromListIdx = this.either.findIndex(p => p.id === item.listId)
         const toListIdx = this.either.findIndex(p => p.id === item.hover.listId)
         let neu = this.either.slice(0);
@@ -59,6 +60,7 @@ export class ParentChildSortable<P extends { id: number } & { children: C[] }, C
     }
 
     parentSpec: SortableSpec<P> = {
+        trackBy: this.tracker,
         copy: this.options.parent && this.options.parent.copy,
         canDrop: this.options.parent && this.options.parent.canDrop,
         beginDrag: (item: DraggedItem<P>) => {
@@ -78,15 +80,18 @@ export class ParentChildSortable<P extends { id: number } & { children: C[] }, C
     };
 
     childSpec: SortableSpec<C> = {
+        trackBy: this.tracker,
         copy: this.options.child && this.options.child.copy,
         canDrop: this.options.child && this.options.child.canDrop,
         beginDrag: (item: DraggedItem<C>) => {
             this.beforeDrag = this.parents;
         },
         hover: (item: DraggedItem<C>) => {
+            this.beforeDrag = this.either;
             this.moveChild(item);
         },
         drop: (item: DraggedItem<C>) => {
+            this.beforeDrag = this.either;
             this.moveChild(item);
             this.beforeDrag = null;
         },

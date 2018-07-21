@@ -15,7 +15,7 @@ import {
     SimpleChange,
     ChangeDetectorRef,
 } from "@angular/core";
-import { SkyhookDndService } from "angular-skyhook";
+import { SkyhookDndService, DropTargetMonitor } from "angular-skyhook";
 import { Observable, Subscription, BehaviorSubject, Subject, of } from "rxjs";
 
 import { ItemTypes } from "./item-types";
@@ -42,9 +42,9 @@ import { distinctUntilChanged, filter, withLatestFrom } from "rxjs/operators";
     <ng-container *ngLet="item$|async as item">
     <ng-container *ngFor="let card of children;
                           let i = index;
-                          trackBy: tracker" >
+                          trackBy: trackBy" >
         <ng-container
-            *ngTemplateOutlet="cardRendererTemplates.first;
+            *ngTemplateOutlet="template;
             context: {
                 $implicit: {
                     data: card,
@@ -79,22 +79,75 @@ export class CardListComponent implements OnDestroy, AfterContentInit, AfterView
     @Output() hover = new EventEmitter<DraggedItem>();
     @Output() endDrag = new EventEmitter<DraggedItem>();
 
+    @Input() template: TemplateRef<CardTemplateContext>;
+
     @ContentChildren(CardTemplateDirective, {
         read: TemplateRef
     })
-    cardRendererTemplates: QueryList<TemplateRef<CardTemplateContext>>;
+    set cardRendererTemplates(ql: QueryList<TemplateRef<CardTemplateContext>>) {
+        if (ql.length > 0) {
+            this.template = ql.first;
+        }
+    };
 
     /** @ignore */
     @HostBinding('style.flexDirection')
+    /** @ignore */
     get flexDirection() {
         return this.horizontal ? 'row': 'column';
     }
 
+    /** @ignore */
     get isEmpty() {
         return isEmpty(this.children);
     }
 
+    /** @ignore */
     subs = new Subscription();
+
+    // #<{(|* @ignore |)}>#
+    // bodyTarget: DropTarget<DraggedItem>;
+    // createBodyTarget = () => this.bodyTarget = this.dnd.dropTarget<DraggedItem>(this.type, {
+    //     drop: (monitor) => {
+    //         if (!monitor.didDrop()) {
+    //             console.log('dropped on body target, calling endDrag');
+    //             this.spec && this.spec.endDrag && this.spec.endDrag(monitor.getItem());
+    //         }
+    //     },
+    //     hover: monitor => {
+    //         const item = monitor.getItem();
+    //         if (!monitor.isOver({ shallow: true })) return;
+    //         if (!item.isInternal) {
+    //             console.log('external hover handled', this.listId);
+    //         }
+    //         const { revertOnSpill, removeOnSpill } = this.spec;
+    //         const canDrop = this.getCanDrop(item);
+    //         // revert case
+    //         if (revertOnSpill !== false && canDrop && monitor.isOver({ shallow: true })) {
+    //             this.callHover(item, {
+    //                 listId: this.listId,
+    //                 index: item.index,
+    //             });
+    //             return;
+    //         }
+    //         // TODO: handle removeOnSpill
+    //     }
+    // }, this.subs);
+
+    /** @ignore */
+    private getCanDrop(item: DraggedItem, _default = true) {
+        if (this.spec && this.spec.canDrop) {
+            return this.spec.canDrop(item);
+        }
+        return _default;
+    }
+
+    callHover(item: DraggedItem, newHover?: { listId: any; index: number; }) {
+        if (newHover) {
+            item.hover = newHover;
+        }
+        this.spec && this.spec.hover && this.spec.hover(item);
+    }
 
     /** @ignore */
     target = this.dnd.dropTarget<DraggedItem>(null, {
@@ -109,25 +162,21 @@ export class CardListComponent implements OnDestroy, AfterContentInit, AfterView
         },
         drop: monitor => {
             const item = monitor.getItem();
-            if (this.spec && this.spec.canDrop && !this.spec.canDrop(item)) {
-                return;
+            if (this.getCanDrop(item)) {
+                this.spec && this.spec.drop && this.spec.drop(item);
+                this.drop.emit(item);
             }
-            this.spec && this.spec.drop && this.spec.drop(item);
-            this.drop.emit(item);
+            return {};
         },
         hover: monitor => {
             if (this.isEmpty) {
                 const item = monitor.getItem();
-                let canDrop = true;
-                if (this.spec && this.spec.canDrop) {
-                    canDrop = this.spec.canDrop(item);
-                }
-                if (canDrop) {
-                    item.hover = {
+                const canDrop = this.getCanDrop(item);
+                if (canDrop && monitor.isOver({ shallow: true })) {
+                    this.callHover(item, {
                         listId: this.listId,
-                        index: 0
-                    };
-                    this.spec && this.spec.hover && this.spec.hover(item);
+                        index: 0,
+                    });
                 }
             }
         }
@@ -135,24 +184,12 @@ export class CardListComponent implements OnDestroy, AfterContentInit, AfterView
 
     item$ = this.target.listen(m => m.canDrop() && m.getItem());
     isOver$ = this.target.listen(m => m.canDrop() && m.isOver());
-    fakeEndDrag$ = this.target
-        .listen(m => m.canDrop())
-        .pipe(
-            filter(x => !x)
-        );
 
     constructor(
         private dnd: SkyhookDndService,
         public cdr: ChangeDetectorRef,
         private el: ElementRef<HTMLElement>,
     ) {
-        this.subs.add(
-            this.fakeEndDrag$
-            .pipe(withLatestFrom(this.item$.pipe(filter(x => !!x))))
-            .subscribe(([_, item]) => {
-                this.spec && this.spec.endDrag && this.spec.endDrag(item);
-            })
-        );
     }
 
     updateChildren(updated: Array<Data>) {
@@ -176,8 +213,8 @@ export class CardListComponent implements OnDestroy, AfterContentInit, AfterView
 
     /** @ignore */
     ngAfterContentInit() {
-        if (this.cardRendererTemplates.length !== 1) {
-            throw new Error("must have exactly one cardRenderer template");
+        if (!this.template) {
+            throw new Error("You must provide a <ng-template cardTemplate> as a content child, or with [template]=\"myTemplateRef\"")
         }
     }
 
@@ -194,7 +231,7 @@ export class CardListComponent implements OnDestroy, AfterContentInit, AfterView
     }
 
     /** @ignore */
-    tracker(_: number, card: Data) {
-        return card.id;
+    trackBy = (_: number, card: Data) => {
+        return this.spec && this.spec.trackBy(card);
     }
 }
