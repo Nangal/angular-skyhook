@@ -13,6 +13,7 @@ import {
     HostBinding,
     ElementRef,
     SimpleChange,
+    ChangeDetectorRef,
 } from "@angular/core";
 import { SkyhookDndService } from "angular-skyhook";
 import { Observable, Subscription, BehaviorSubject, Subject, of } from "rxjs";
@@ -32,6 +33,7 @@ import { DropTarget } from 'angular-skyhook';
 import { Size } from "./size";
 import { SortableSpec } from "./SortableSpec";
 import { isEmpty } from './isEmpty';
+import { distinctUntilChanged, filter, withLatestFrom } from "rxjs/operators";
 
 @Component({
     selector: "skyhook-card-list",
@@ -48,7 +50,6 @@ import { isEmpty } from './isEmpty';
                     data: card,
                     index: i,
                     item: item && item.id === card.id && item,
-                    isDragging: item && item.id === card.id,
                     listId: listId,
                     type: type,
                     spec: spec,
@@ -70,7 +71,7 @@ export class CardListComponent implements OnDestroy, AfterContentInit, AfterView
     @Input() listId: any = Math.random();
     @Input() horizontal = false;
     @Input() children: Array<Data> | Iterable<Data>;
-    @Input() type = ItemTypes.CARD;
+    @Input() type: string | symbol = ItemTypes.CARD;
     @Input() spec: SortableSpec;
 
     @Output() drop = new EventEmitter<DraggedItem>();
@@ -134,11 +135,34 @@ export class CardListComponent implements OnDestroy, AfterContentInit, AfterView
 
     item$ = this.target.listen(m => m.canDrop() && m.getItem());
     isOver$ = this.target.listen(m => m.canDrop() && m.isOver());
+    fakeEndDrag$ = this.target
+        .listen(m => m.canDrop())
+        .pipe(
+            filter(x => !x)
+        );
 
     constructor(
         private dnd: SkyhookDndService,
+        public cdr: ChangeDetectorRef,
         private el: ElementRef<HTMLElement>,
     ) {
+        this.subs.add(
+            this.fakeEndDrag$
+            .pipe(withLatestFrom(this.item$.pipe(filter(x => !!x))))
+            .subscribe(([_, item]) => {
+                this.spec && this.spec.endDrag && this.spec.endDrag(item);
+            })
+        );
+    }
+
+    updateChildren(updated: Array<Data>) {
+        this.children = updated;
+        this.cdr.markForCheck();
+    }
+
+    updateType(newtype: string | symbol) {
+        this.type = newtype;
+        this.cdr.markForCheck();
     }
 
     /** @ignore */

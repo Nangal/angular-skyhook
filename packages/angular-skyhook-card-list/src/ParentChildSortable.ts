@@ -2,10 +2,13 @@ import { DraggedItem } from "./dragged-item";
 import { Data } from "./data";
 import { SortableSpec } from './SortableSpec';
 
-export class ParentChildSortable<P extends Data & { children: C[] }, C extends Data> {
+export class ParentChildSortable<P extends { id: number } & { children: C[] }, C extends Data> {
     beforeDrag: P[] = null;
-    cachedCopyChild: C = null;
-    cachedCopyParent: P = null;
+
+    get either() {
+        return this.beforeDrag || this.parents;
+    }
+
     constructor (
         public parents: P[],
         public options: {
@@ -31,9 +34,10 @@ export class ParentChildSortable<P extends Data & { children: C[] }, C extends D
     }
 
     moveChild(item: DraggedItem<C>) {
-        const fromListIdx = this.beforeDrag.findIndex(p => p.id === item.listId)
-        const toListIdx = this.beforeDrag.findIndex(p => p.id === item.hover.listId)
-        let neu = this.beforeDrag.slice(0);
+        console.log(item);
+        const fromListIdx = this.either.findIndex(p => p.id === item.listId)
+        const toListIdx = this.either.findIndex(p => p.id === item.hover.listId)
+        let neu = this.either.slice(0);
 
         if (!item.isCopy) {
             let fromChildren = neu[fromListIdx].children.slice(0);
@@ -68,7 +72,7 @@ export class ParentChildSortable<P extends Data & { children: C[] }, C extends D
             this.beforeDrag = null;
         },
         endDrag: (item: DraggedItem<P>) => {
-            this.parents = this.beforeDrag;
+            this.parents = this.either;
             this.beforeDrag = null;
         }
     };
@@ -85,12 +89,10 @@ export class ParentChildSortable<P extends Data & { children: C[] }, C extends D
         drop: (item: DraggedItem<C>) => {
             this.moveChild(item);
             this.beforeDrag = null;
-            this.cachedCopyChild = null;
         },
         endDrag: (item: DraggedItem<C>) => {
-            this.parents = this.beforeDrag;
+            this.parents = this.either;
             this.beforeDrag = null;
-            this.cachedCopyChild = null;
         }
     }
 }

@@ -41,7 +41,10 @@ import { CardRendererInput } from "./card-template.directive";
     exportAs: 'cardRenderer'
 })
 export class CardRendererDirective implements OnInit, OnDestroy {
-    @Input('cardRenderer') context: CardRendererInput;
+    context: CardRendererInput;
+    @Input('cardRenderer') set _context(c: CardRendererInput) {
+        this.context = c;
+    }
 
     get data() { return this.context.data; }
     get type() { return this.context.type; }
@@ -49,7 +52,6 @@ export class CardRendererDirective implements OnInit, OnDestroy {
     get index() { return this.context.index; }
     get horizontal() { return this.context.horizontal; }
     get item() { return this.context.item; }
-    get isDragging() { return this.context.isDragging; }
     @HostBinding("style.display")
     get hidden() { return this.context.hidden ? 'none' : null; }
 
